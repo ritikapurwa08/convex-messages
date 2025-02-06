@@ -1,59 +1,68 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { Doc, Id } from "./_generated/dataModel";
+import { Id } from "./_generated/dataModel";
+import { getAuthUserId } from "@convex-dev/auth/server";
 
 export const createChat = mutation({
   args: {
     chatUsers: v.array(v.id("users")),
-    chatImage: v.string(), // Optional: You might make chatImage optional for personal chats
+    chatImage: v.optional(v.string()), // Optional: You might make chatImage optional for personal chats
   },
   handler: async (ctx, args) => {
-    let chatName = "";
-    let chatType: "personal" | "group" = "personal"; // Default to "personal"
+    let chatType: "personal" | "group" = "personal";
+    let chatId: Id<"chats"> | undefined = undefined; // Initialize chatId outside the conditional blocks
 
     if (args.chatUsers.length > 2) {
       chatType = "group";
-      // Determine group chat name (e.g., using the first user's name)
-      if (args.chatUsers.length > 0) {
-        const firstUser = await ctx.db.get(args.chatUsers[0]);
-        chatName = firstUser ? `Group with ${firstUser.name}` : "New Group";
-      } else {
-        chatName = "New Group";
-      }
+      // ... (group chat logic - if you need to create a group chat record)
+      chatId = await ctx.db.insert("chats", {
+        chatType,
+        chatUsers: args.chatUsers,
+      });
     } else if (args.chatUsers.length === 2) {
       chatType = "personal";
       const user1 = await ctx.db.get(args.chatUsers[0]);
       const user2 = await ctx.db.get(args.chatUsers[1]);
 
       if (user1 && user2) {
-        chatName = `${user1.name} and ${user2.name}`;
-        // Consider returning here if you *only* want to create personal chats when there are exactly 2 users and *not* insert into the database
-        // return chatName;
-      } else {
-        // Handle the case where one or both users are not found.
-        // You might throw an error or set a default chat name.
-        chatName = "Unknown Chat";
+        chatId = await ctx.db.insert("chats", {
+          // Assign chatId here
+          chatType,
+          chatUsers: args.chatUsers,
+        });
+
+        await ctx.db.insert("userChats", {
+          userId: args.chatUsers[0],
+          chatId: chatId,
+          chatName: user2.name,
+          chatImage: user2.customImage,
+        });
+
+        await ctx.db.insert("userChats", {
+          userId: args.chatUsers[1],
+          chatId: chatId,
+          chatName: user1.name,
+          chatImage: user1.customImage,
+        });
+
+        // Add chatId to users' 'chats' array
+        await ctx.db.patch(args.chatUsers[0], {
+          chats: [
+            ...((await ctx.db.get(args.chatUsers[0]))?.chats || []),
+            chatId,
+          ],
+        });
+
+        await ctx.db.patch(args.chatUsers[1], {
+          chats: [
+            ...((await ctx.db.get(args.chatUsers[1]))?.chats || []),
+            chatId,
+          ],
+        });
       }
-    } else {
-      // Handle cases with 0 or 1 users.
-      // Maybe throw an error or set a default name.
-      chatName = "Invalid Chat";
     }
 
-    const chat = await ctx.db.insert("chats", {
-      chatName, // Now determined by the number of users
-      chatType, // "group" or "personal" based on the number of users
-      chatUsers: args.chatUsers,
-      chatImage: args.chatImage,
-    });
-
-    for (const userId of args.chatUsers) {
-      await ctx.db.patch(userId, {
-        chats: [...((await ctx.db.get(userId))?.chats || []), chat],
-      });
-    }
-
-    return chat;
+    return chatId; // Return chatId outside the conditional blocks
   },
 });
 
@@ -62,24 +71,28 @@ export const getUserChats = query({
     userId: v.id("users"),
   },
   handler: async (ctx, args) => {
-    // Fetch user document
-    const user = await ctx.db.get(args.userId);
-    if (!user) return null;
+    const userChatsFromDb = await ctx.db
+      .query("userChats")
+      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+      .collect();
 
-    // Fetch all chats associated with the user
-    const userChats = await Promise.all(
-      (user.chats || []).map(async (chatId) => {
-        const chat = await ctx.db.get(chatId);
-        if (!chat) return null;
+    const chatsWithDetails = await Promise.all(
+      userChatsFromDb.map(async (userChat) => {
+        const chat = await ctx.db.get(userChat.chatId);
+        if (!chat) return null; // Handle deleted chats
 
         return {
-          ...chat,
-          unreadMessageCount: chat.unreadMessageCount?.[args.userId] || 0, // Get unread count for this user
+          chatId: userChat.chatId,
+          chatImage: userChat.chatImage,
+          chatName: userChat.chatName,
+          chatType: chat.chatType,
+          lastMessage: chat.lastMessage,
+          unreadMessageCount: chat.unreadMessageCount?.[args.userId] || 0, // Get unread count
         };
       })
     );
 
-    return userChats.filter((chat) => chat !== null);
+    return chatsWithDetails.filter((chat) => chat !== null);
   },
 });
 
@@ -94,7 +107,6 @@ export const sendMessage = mutation({
       senderId: args.senderId,
       chatId: args.chatId,
       message: args.message,
-      reactions: [],
       readBy: [],
     });
     const chat = await ctx.db.get(args.chatId);
@@ -119,6 +131,7 @@ export const sendMessage = mutation({
     return message;
   },
 });
+
 export const markMessagesAsRead = mutation({
   args: {
     chatId: v.id("chats"),
@@ -142,6 +155,7 @@ export const markMessagesAsRead = mutation({
     return { success: true };
   },
 });
+
 export const getMessages = query({
   args: {
     chatId: v.id("chats"),
@@ -253,60 +267,102 @@ export const getMessageById = query({
   },
 });
 
-export const addReaction = mutation({
+export const getOtherUserInChat = query({
   args: {
-    messageId: v.id("messages"), // Message ID
-    userId: v.id("users"), // User ID
-    reaction: v.union(
-      v.literal("like"),
-      v.literal("love"),
-      v.literal("haha"),
-      v.literal("sad"),
-      v.literal("angry"),
-      v.literal("wow")
-    ), // Reaction type (one of the above)
+    userId: v.id("users"),
+    chatId: v.id("chats"),
   },
   handler: async (ctx, args) => {
-    const { messageId, userId, reaction } = args;
-
-    // Fetch the message
-    const message = await ctx.db.get(messageId);
-    if (!message) throw new Error("Message not found");
-
-    // Check if the user has already reacted to this message
-    const existingReaction = message.reactions?.find(
-      (reactionObj) => reactionObj.userId === userId
-    );
-
-    if (existingReaction) {
-      // Replace the existing reaction with the new one
-      await ctx.db.patch(messageId, {
-        reactions: message.reactions?.map((reactionObj) =>
-          reactionObj.userId === userId
-            ? { ...reactionObj, reaction }
-            : reactionObj
-        ),
-      });
-    } else {
-      // Add a new reaction
-      await ctx.db.patch(messageId, {
-        reactions: [...(message.reactions || []), { userId, reaction }],
-      });
+    const chat = await ctx.db.get(args.chatId);
+    if (!chat) {
+      return null; // Or throw an error
     }
 
-    return { success: true };
+    const otherUserId = chat.chatUsers.find((id) => id !== args.userId);
+    if (!otherUserId) {
+      return null; // Or throw an error if no other user exists (e.g., group chat with only one user)
+    }
+
+    const otherUserChat = await ctx.db
+      .query("userChats")
+      .withIndex("by_chat_and_user", (q) =>
+        q.eq("chatId", args.chatId).eq("userId", otherUserId)
+      )
+      .unique();
+
+    if (!otherUserChat) {
+      return null; // Handle the case where the other user's entry is not found
+    }
+
+    return {
+      name: otherUserChat.chatName,
+      image: otherUserChat.chatImage,
+    };
   },
 });
 
-export const getReactions = query({
+export const setReaction = mutation({
   args: {
-    messageId: v.id("messages"), // Message ID to fetch reactions for
+    messageId: v.id("messages"),
+    reactionPath: v.string(), // Now reactionPath is required string
   },
   handler: async (ctx, args) => {
-    // Fetch the message
-    const message = await ctx.db.get(args.messageId);
-    if (!message) throw new Error("Message not found");
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Authentication required to add reaction"); // Enforce authentication
+    }
 
-    return message.reactions || [];
+    const message = await ctx.db.get(args.messageId);
+    if (!message) {
+      throw new Error("Message not found");
+    }
+
+    const currentReactions = message.reactionPath || {}; // Get existing reactions or empty record
+    const updatedReactions = {
+      ...currentReactions,
+      [userId]: args.reactionPath,
+    }; // Update/add user's reaction
+
+    await ctx.db.patch(args.messageId, {
+      reactionPath: updatedReactions, // Update with the new record
+    });
+  },
+});
+export const removeReaction = mutation({
+  // Optional: Mutation to remove reaction
+  args: {
+    messageId: v.id("messages"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Authentication required to remove reaction");
+    }
+
+    const message = await ctx.db.get(args.messageId);
+    if (!message) {
+      throw new Error("Message not found");
+    }
+
+    const currentReactions = message.reactionPath || {};
+    const updatedReactions = { ...currentReactions }; // Copy current reactions
+    delete updatedReactions[userId]; // Remove user's reaction
+
+    await ctx.db.patch(args.messageId, {
+      reactionPath: updatedReactions,
+    });
+  },
+});
+export const getMessageReactions = query({
+  // Renamed query to getMessageReactions
+  args: {
+    messageId: v.id("messages"),
+  },
+  handler: async (ctx, args) => {
+    const message = await ctx.db.get(args.messageId);
+    if (!message) {
+      return null; // Or throw an error if message not found is exceptional
+    }
+    return message.reactionPath || []; // Return reactionPath array or empty array if not set
   },
 });

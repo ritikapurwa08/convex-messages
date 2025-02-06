@@ -108,6 +108,6 @@ export const useMarkAsRead = () => {
 };
 
 export const useAddUserReaction = () => {
-  const addUserReaction = useMutation(api.chats.addReaction);
+  const addUserReaction = useMutation(api.chats.setReaction);
   return useMutationHook(addUserReaction);
 };

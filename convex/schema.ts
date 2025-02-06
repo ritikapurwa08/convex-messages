@@ -9,38 +9,33 @@ const Tables = () => {
     customImage: v.string(),
     chats: v.array(v.id("chats")),
   }).index("by_chats", ["chats"]);
+  const userChats = defineTable({
+    // New table for per-user chat info
+    chatId: v.id("chats"),
+    userId: v.id("users"),
+    chatName: v.string(),
+    chatImage: v.string(),
+  })
+    .index("by_chat_and_user", ["chatId", "userId"])
+    .index("by_userId", ["userId"])
+    .index("by_chatId", ["chatId"]);
 
   const chats = defineTable({
-    chatName: v.string(),
     chatType: v.union(v.literal("group"), v.literal("personal")),
     chatUsers: v.array(v.id("users")),
-    chatImage: v.string(),
+
     unreadMessageCount: v.optional(v.record(v.id("users"), v.number())),
     lastMessage: v.optional(v.string()), // Reference to the last message in the chat
   })
     .index("by_chat_users", ["chatUsers"])
-    .index("by_chat_name", ["chatName"])
+
     .index("by_chat_type", ["chatType"]);
 
   const messages = defineTable({
     senderId: v.id("users"),
     chatId: v.id("chats"),
     message: v.string(),
-    reactions: v.optional(
-      v.array(
-        v.object({
-          userId: v.id("users"),
-          reaction: v.union(
-            v.literal("like"),
-            v.literal("love"),
-            v.literal("haha"),
-            v.literal("sad"),
-            v.literal("angry"),
-            v.literal("wow")
-          ),
-        })
-      )
-    ),
+    reactionPath: v.optional(v.record(v.id("users"), v.string())),
     readBy: v.array(v.id("users")), // Array of user IDs who have read the message
     updatedAt: v.optional(v.number()),
   })
@@ -51,6 +46,7 @@ const Tables = () => {
     users,
     chats,
     messages,
+    userChats,
   };
 };
 
@@ -59,4 +55,5 @@ export default defineSchema({
   chats: Tables().chats,
   messages: Tables().messages,
   users: Tables().users,
+  userChats: Tables().userChats,
 });

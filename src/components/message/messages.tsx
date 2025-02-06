@@ -1,17 +1,13 @@
-import React, { useEffect } from "react";
 import { useGetUserMessages } from "@/actions/mutations/messages";
 import { useGetCurrentUser } from "@/actions/query/users";
-import { Link, useParams } from "react-router-dom";
 import SendMessage from "./send-message";
-import { ArrowLeft } from "lucide-react";
-import { Button } from "../ui/button";
 import { useState } from "react";
 import { MessageList } from "./message-list";
 import { Id } from "@convex/_generated/dataModel";
 import { cn } from "@/lib/utils";
+import MessageHeader from "./message-header";
 
-const Messages = () => {
-  const { chatId } = useParams<{ chatId: Id<"chats"> }>();
+const Messages = ({ chatId }: { chatId: Id<"chats"> }) => {
   const user = useGetCurrentUser();
   const userId = user?._id;
   const messages = useGetUserMessages({ chatId });
@@ -25,26 +21,18 @@ const Messages = () => {
   console.log(isKeyboardVisible);
 
   return (
-    <div
-      className={cn(
-        "fixed inset-0 flex flex-col bg-background",
-        !isKeyboardVisible && "overflow-hidden"
-      )}
-    >
-      <header className="flex-none p-4 border-b">
-        <Button variant="outline" type="button">
-          <Link className="flex items-center" to="/">
-            <ArrowLeft className="size-5 mr-2" />
-            <span>chatName</span>
-          </Link>
-        </Button>
-      </header>
-
+    <div className="flex flex-col h-full bg-background">
+      {" "}
+      {/* h-full is key */}
+      <MessageHeader chatId={chatId} userId={userId} /> {/* Header remains */}
       <main className="flex-1 custom-scrollbar overflow-y-auto">
+        {" "}
+        {/* Scrollable content */}
         <MessageList chatId={chatId} userId={userId} messages={messages} />
       </main>
-
       <footer className="flex-none p-4 border-t bg-background">
+        {" "}
+        {/* Footer remains */}
         <div
           className={cn("max-w-3xl mx-auto w-full", isKeyboardVisible && "")}
         >
@@ -53,7 +41,7 @@ const Messages = () => {
             setExistingMessage={setExistingMsg}
             chatId={chatId}
             senderId={user?._id}
-            onKeyboardStatusChange={handleKeyboardStatusChange} // Pass the callback
+            onKeyboardStatusChange={handleKeyboardStatusChange}
           />
         </div>
       </footer>
