@@ -7,44 +7,33 @@ const Tables = () => {
     name: v.string(),
     email: v.string(),
     customImage: v.string(),
-    chats: v.array(v.id("chats")),
+    chats: v.array(v.id("userChats")), // Relation to userChats
   }).index("by_chats", ["chats"]);
+
   const userChats = defineTable({
-    // New table for per-user chat info
-    chatId: v.id("chats"),
-    userId: v.id("users"),
-    chatName: v.string(),
-    chatImage: v.string(),
-  })
-    .index("by_chat_and_user", ["chatId", "userId"])
-    .index("by_userId", ["userId"])
-    .index("by_chatId", ["chatId"]);
-
-  const chats = defineTable({
     chatType: v.union(v.literal("group"), v.literal("personal")),
-    chatUsers: v.array(v.id("users")),
-
-    unreadMessageCount: v.optional(v.record(v.id("users"), v.number())),
-    lastMessage: v.optional(v.string()), // Reference to the last message in the chat
+    chatName: v.string(), // Generic chat name (can be dynamic on frontend)
+    chatImage: v.string(), // Generic chat image (can be dynamic on frontend)
+    chatUsers: v.array(v.id("users")), // Users in the chat (for both personal and group)
+    lastMessage: v.optional(v.string()),
+    unreadMessageCount: v.optional(v.record(v.id("users"), v.number())), // Unread counts per user
   })
-    .index("by_chat_users", ["chatUsers"])
-
-    .index("by_chat_type", ["chatType"]);
+    .index("by_user_chat_type", ["chatType"]) // For chat type based queries // For finding personal chats (no filter here)
+    .index("by_chatUsers", ["chatUsers"]); // For finding chats by users (efficient chat existence check)
 
   const messages = defineTable({
     senderId: v.id("users"),
-    chatId: v.id("chats"),
+    userChatId: v.id("userChats"), // Link to userChats
     message: v.string(),
     reactionPath: v.optional(v.record(v.id("users"), v.string())),
-    readBy: v.array(v.id("users")), // Array of user IDs who have read the message
+    readBy: v.array(v.id("users")),
     updatedAt: v.optional(v.number()),
   })
-    .index("by_chat_id", ["chatId"])
-    .index("by_sender_id", ["senderId"]);
+    .index("by_user_chat_id", ["userChatId"]) // For fetching messages in a chat
+    .index("by_sender_id", ["senderId"]); // For querying messages by sender
 
   return {
     users,
-    chats,
     messages,
     userChats,
   };
@@ -52,7 +41,6 @@ const Tables = () => {
 
 export default defineSchema({
   ...authTables,
-  chats: Tables().chats,
   messages: Tables().messages,
   users: Tables().users,
   userChats: Tables().userChats,

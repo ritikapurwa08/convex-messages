@@ -11,8 +11,9 @@ import { Id } from "@convex/_generated/dataModel";
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import { SmileIcon } from "lucide-react";
-import { useAddUserReaction } from "@/actions/mutations/messages";
+
 import emojis, { EmojisInterface } from "@/emojis";
+import { useAddUserReaction } from "@/actions/mutations/messages/message-mution";
 
 interface AddReactionDropdownProps {
   messageId: Id<"messages">;
@@ -80,6 +81,7 @@ const AddReactionDropdown: React.FC<AddReactionDropdownProps> = ({
           {filteredEmojis.map((emoji) => (
             <DropdownMenuItem
               key={emoji.id}
+              disabled={addingReaction}
               onSelect={() => handleAddReaction(emoji)}
               className="cursor-pointer focus:bg-gray-100 rounded-md p-1"
             >

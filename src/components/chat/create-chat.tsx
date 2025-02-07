@@ -8,19 +8,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "../ui/dialog";
-import { Id } from "@convex/_generated/dataModel";
 
 import { GroupIcon, MessageCirclePlusIcon } from "lucide-react";
-
 import AddUsersToChatList from "./add-users-to-chat-list";
 
-const CreateChatDialog = ({
-  currentUserId,
-  chatType,
-}: {
-  currentUserId: Id<"users"> | undefined;
-  chatType: "group" | "personal";
-}) => {
+const CreateChatDialog = ({ chatType }: { chatType: "group" | "personal" }) => {
   const [open, setOpen] = useState(false);
   return (
     <main className="">
@@ -42,17 +34,19 @@ const CreateChatDialog = ({
         </DialogTrigger>
         <DialogContent className="">
           <DialogHeader>
-            <DialogTitle>Create a Personal Chat</DialogTitle>
+            <DialogTitle>
+              {chatType === "personal"
+                ? "Create a Personal Chat"
+                : "Create a Group Chat"}
+            </DialogTitle>
             <DialogDescription>
-              Select a user to start a chat.
+              {chatType === "personal"
+                ? "Select a user to start a chat."
+                : "Select users to add to the group chat."}
             </DialogDescription>
           </DialogHeader>
-          <div className="overflow-y-auto  min-h-[44vh] custom-scrollbar max-h-[44vh]">
-            <AddUsersToChatList
-              setIsOpen={setOpen}
-              chatType={chatType}
-              currentUserId={currentUserId}
-            />
+          <div className="overflow-y-auto min-h-[44vh] custom-scrollbar max-h-[44vh]">
+            <AddUsersToChatList setIsOpen={setOpen} chatType={chatType} />
           </div>
         </DialogContent>
       </Dialog>

@@ -2,22 +2,18 @@ import { Id } from "@convex/_generated/dataModel";
 import { Skeleton } from "../ui/skeleton";
 import { motion } from "framer-motion";
 import { MessageSquareIcon } from "lucide-react";
-import { useEffect, useRef } from "react";
-import { useMarkAsRead } from "@/actions/mutations/messages";
+import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import AddMessageReaction from "./add-reaction-dropdown";
 import ShowMessageEmoji from "./show-message-reaction";
 import { format } from "date-fns"; // Import date-fns format function
+import { useMarkAsRead } from "@/actions/mutations/messages/message-mution";
 
 interface Message {
   _id: Id<"messages">;
   _creationTime: number;
-  chatId: Id<"chats">;
   message: string;
-  reactions?: {
-    userId: Id<"users">;
-    reaction: "like" | "love" | "haha" | "sad" | "angry" | "wow";
-  }[];
+  reactionPath?: Record<Id<"users">, string> | undefined;
   readBy: Id<"users">[];
   senderId: Id<"users">;
   updatedAt?: number;
@@ -30,11 +26,42 @@ interface Message {
 interface MessageListProps {
   messages: Message[] | null | undefined;
   userId: Id<"users"> | undefined;
-  chatId: Id<"chats"> | undefined;
+  chatId: Id<"userChats"> | undefined;
 }
+
+const messageVariants = {
+  initial: { opacity: 0, y: 20 },
+  animate: { opacity: 1, y: 0 },
+  transition: { duration: 0.3 },
+};
+
+const bubbleGradients = [
+  "bg-gradient-to-br from-blue-400 to-purple-500",
+  "bg-gradient-to-br from-green-400 to-teal-500",
+  "bg-gradient-to-br from-yellow-400 to-orange-500",
+  "bg-gradient-to-br from-pink-400 to-red-500",
+  "bg-gradient-to-br from-cyan-400 to-blue-500",
+];
 
 export const MessageList = ({ messages, userId, chatId }: MessageListProps) => {
   let stop = "stops";
+  const [gradientIndex, setGradientIndex] = useState(0);
+  const messageEndRef = useRef<HTMLDivElement | null>(null);
+  const { mutate: markAsRead } = useMarkAsRead();
+
+  useEffect(() => {
+    messageEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (chatId && userId) {
+      markAsRead({ chatId, userId });
+    }
+  }, [messages, chatId, userId, markAsRead]);
+  useEffect(() => {
+    if (chatId) {
+      // Simple way to cycle through gradients, can be improved for persistence
+      setGradientIndex((prevIndex) => (prevIndex + 1) % bubbleGradients.length);
+    }
+  }, [chatId]);
+
   if (messages === undefined || stop === "stop") {
     return (
       <div className="flex flex-col w-full space-y-3 p-4">
@@ -63,82 +90,89 @@ export const MessageList = ({ messages, userId, chatId }: MessageListProps) => {
     );
   }
 
-  const messageEndRef = useRef<HTMLDivElement | null>(null);
-  const { mutate: markAsRead } = useMarkAsRead();
-
-  useEffect(() => {
-    messageEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    if (chatId && userId) {
-      markAsRead({ chatId, userId });
-    }
-  }, [messages]);
-
   return (
-    <div className="pb-12 flex flex-col w-full space-y-2 px-4 mx-auto">
+    <div className={cn("pb-12 flex flex-col w-full  px-4 mx-auto")}>
       {messages.map((message, index) => {
-        const isOwner = message.senderId === userId; // Determine if current user is the sender
+        const isOwner = message.senderId === userId;
+        const bubbleGradientClass = isOwner
+          ? bubbleGradients[gradientIndex % bubbleGradients.length]
+          : "bg-gray-200 text-black";
+
         return (
           <motion.div
-            key={message._id}
-            // ... (animation props - you can add animation props here if needed)
+            key={index}
+            variants={messageVariants}
+            initial="initial"
+            animate="animate"
             className={cn(
-              "flex items-start", // Removed space-x-2, Adjusted items-start for closer layout
-              isOwner ? "justify-end" : "justify-start" // Keep justify-end/start for overall alignment
+              "w-full flex",
+              isOwner ? "justify-end" : "justify-start"
             )}
           >
             <div
-              className={cn("flex", isOwner ? "flex-row" : "flex-row-reverse")}
+              className={cn(
+                "relative flex  space-x-1 max-w-[75%] sm:max-w-[60%] md:max-w-[50%]",
+                isOwner ? "flex-row" : "flex-row-reverse",
+                message.reactionPath ? "pb-6" : "pb-6"
+              )}
             >
+              <div id="add-reaction" className="h-full  items-center flex">
+                {isOwner && <AddMessageReaction messageId={message._id} />}
+              </div>
+              <div id="add-reaction" className="h-full  items-center flex">
+                {!isOwner && <AddMessageReaction messageId={message._id} />}
+              </div>
               <div
                 className={cn(
-                  "h-full flex items-center justify-center"
-                  // Conditionally reorder for other users
+                  "p-3 rounded-xl h-auto   relative",
+                  bubbleGradientClass,
+                  isOwner ? "rounded-br-none" : "rounded-bl-none"
                 )}
               >
-                <AddMessageReaction messageId={message._id} />
-              </div>
-              <div className="flex flex-col">
-                <div
-                  className={cn(
-                    "rounded-2xl p-3 shadow-lg relative", // Removed max-w-[75%] here
-                    "max-w-[40%]", // Added max-w-[40%] here to constrain bubble width
-                    "break-words", // Keep break-words for text wrapping
-                    isOwner
-                      ? "bg-gradient-to-br from-pink-400 to-red-500 text-white rounded-tr-none"
-                      : "bg-gray-200 text-black rounded-tl-none"
-                  )}
-                >
-                  <div className="flex flex-col m-0 p-0">
-                    <span className="break-words" id="message">
-                      {message.message}
-                    </span>
-                  </div>
+                <div className="break-words whitespace-pre-line">
+                  {message.message}
                 </div>
-                <div className="flex items-center justify-between mt-1">
-                  <ShowMessageEmoji messageId={message._id} />
-                  <span className="text-xs text-gray-500 ml-1">
-                    {" "}
-                    {/*Reduced ml-2 to ml-1*/}
+                <div className="flex w-full justify-between items-end  ">
+                  <span
+                    className={cn(
+                      "text-xs absolute  -bottom-4  text-muted-foreground",
+                      isOwner ? "right-2" : "left-2"
+                    )}
+                  >
                     {format(message._creationTime, "HH:mm")}
                   </span>
+                  {message.reactionPath && (
+                    <div
+                      className={cn(
+                        "absolute w-full   flex -bottom-5 ",
+                        isOwner ? "justify-start" : "justify-end"
+                      )}
+                    >
+                      <ShowMessageEmoji messageId={message._id} />
+                    </div>
+                  )}
                 </div>
-                {!isOwner && (
+              </div>
+
+              {isOwner && (
+                <div className=" w-10 min-w-10 flex items-end pb-4 ">
                   <img
                     src={message.sender.customImage}
-                    className="size-7 mr-1 rounded-full object-cover shadow-md mt-1" // Reduced mr-2 to mr-1
+                    className="size-8 rounded-full mr-2 -mb-2"
                     alt={message.sender.name}
                   />
-                )}
-              </div>
+                </div>
+              )}
+              {!isOwner && (
+                <div className=" w-10 min-w-10 flex items-end pb-4 ">
+                  <img
+                    src={message.sender.customImage}
+                    className="size-8 rounded-full mr-2 -mb-2"
+                    alt={message.sender.name}
+                  />
+                </div>
+              )}
             </div>
-
-            {isOwner && (
-              <img
-                src={message.sender.customImage}
-                className="size-7 ml-1 rounded-full object-cover shadow-md mt-1" //Reduced ml-2 to ml-1
-                alt={message.sender.name}
-              />
-            )}
           </motion.div>
         );
       })}

@@ -1,4 +1,3 @@
-import { useSendMessage } from "@/actions/mutations/messages";
 import { Id } from "@convex/_generated/dataModel";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -6,16 +5,17 @@ import { z } from "zod";
 import { Form } from "../ui/form";
 import { useEffect, useState } from "react";
 import CustomMessageInput from "../ui/custom-message-input";
+import { useSendMessage } from "@/actions/mutations/messages/message-mution";
 
 interface SendMessageProps {
-  chatId: Id<"chats"> | undefined;
+  chatId: Id<"userChats"> | undefined;
   senderId: Id<"users"> | undefined;
   existingMessage?: string;
   setExistingMessage?: (msg: string) => void;
 }
 
 interface SendMessageProps {
-  chatId: Id<"chats"> | undefined;
+  chatId: Id<"userChats"> | undefined;
   senderId: Id<"users"> | undefined;
   existingMessage?: string;
   setExistingMessage?: (msg: string) => void;

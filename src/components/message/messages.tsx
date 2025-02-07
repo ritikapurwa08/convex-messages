@@ -1,41 +1,60 @@
-import { useGetUserMessages } from "@/actions/mutations/messages";
 import { useGetCurrentUser } from "@/actions/query/users";
 import SendMessage from "./send-message";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react"; // Import useRef
 import { MessageList } from "./message-list";
 import { Id } from "@convex/_generated/dataModel";
-import { cn } from "@/lib/utils";
+
+import { useGetMessages } from "@/actions/query/messages/message-query";
 import MessageHeader from "./message-header";
 
-const Messages = ({ chatId }: { chatId: Id<"chats"> }) => {
+const Messages = ({ chatId }: { chatId: Id<"userChats"> }) => {
   const user = useGetCurrentUser();
+
   const userId = user?._id;
-  const messages = useGetUserMessages({ chatId });
+  const messages = useGetMessages({ chatId });
   const [message, setExistingMsg] = useState<string>("");
-  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false); // Track keyboard visibility
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+  const [, setWindowHeight] = useState(window.innerHeight); // Track window height
+  const messageListRef = useRef<HTMLDivElement>(null); // Create a ref
+
+  useEffect(() => {
+    const handleResize = () => {
+      setWindowHeight(window.innerHeight); // Update window height on resize
+    };
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   const handleKeyboardStatusChange = (isVisible: boolean) => {
     setIsKeyboardVisible(isVisible);
   };
 
-  console.log(isKeyboardVisible);
+  const handleScroll = () => {
+    if (isKeyboardVisible) {
+      document.activeElement instanceof HTMLElement &&
+        document.activeElement.blur();
+      setIsKeyboardVisible(false); // Optionally update keyboard visibility state
+    }
+  };
+
+  // Calculate dynamic max-h for message list
 
   return (
-    <div className="flex flex-col h-full bg-background">
-      {" "}
-      {/* h-full is key */}
-      <MessageHeader chatId={chatId} userId={userId} /> {/* Header remains */}
-      <main className="flex-1 custom-scrollbar overflow-y-auto">
-        {" "}
-        {/* Scrollable content */}
-        <MessageList chatId={chatId} userId={userId} messages={messages} />
+    <div className="flex flex-col h-full max-h-[110dvh] relative w-full bg-background">
+      <main
+        ref={messageListRef} // Attach the ref to the main element
+        onScroll={handleScroll} // Add onScroll handler
+        className="flex-1 w-full overflow-y-auto custom-scrollbar"
+      >
+        <MessageHeader chatId={chatId} />
+
+        <div className="max-w-4xl mx-auto py-5 px-4">
+          <MessageList chatId={chatId} userId={userId} messages={messages} />
+        </div>
       </main>
-      <footer className="flex-none p-4 border-t bg-background">
-        {" "}
-        {/* Footer remains */}
-        <div
-          className={cn("max-w-3xl mx-auto w-full", isKeyboardVisible && "")}
-        >
+      <footer className="w-full sticky bottom-0 border-t bg-background p-4">
+        <div className="max-w-4xl mx-auto">
           <SendMessage
             existingMessage={message}
             setExistingMessage={setExistingMsg}

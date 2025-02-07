@@ -3,66 +3,119 @@ import { mutation, query } from "./_generated/server";
 import { Id } from "./_generated/dataModel";
 import { getAuthUserId } from "@convex-dev/auth/server";
 
-export const createChat = mutation({
+export const createGroupChat = mutation({
   args: {
     chatUsers: v.array(v.id("users")),
-    chatImage: v.optional(v.string()), // Optional: You might make chatImage optional for personal chats
   },
   handler: async (ctx, args) => {
-    let chatType: "personal" | "group" = "personal";
-    let chatId: Id<"chats"> | undefined = undefined; // Initialize chatId outside the conditional blocks
-
-    if (args.chatUsers.length > 2) {
-      chatType = "group";
-      // ... (group chat logic - if you need to create a group chat record)
-      chatId = await ctx.db.insert("chats", {
-        chatType,
-        chatUsers: args.chatUsers,
-      });
-    } else if (args.chatUsers.length === 2) {
-      chatType = "personal";
-      const user1 = await ctx.db.get(args.chatUsers[0]);
-      const user2 = await ctx.db.get(args.chatUsers[1]);
-
-      if (user1 && user2) {
-        chatId = await ctx.db.insert("chats", {
-          // Assign chatId here
-          chatType,
-          chatUsers: args.chatUsers,
-        });
-
-        await ctx.db.insert("userChats", {
-          userId: args.chatUsers[0],
-          chatId: chatId,
-          chatName: user2.name,
-          chatImage: user2.customImage,
-        });
-
-        await ctx.db.insert("userChats", {
-          userId: args.chatUsers[1],
-          chatId: chatId,
-          chatName: user1.name,
-          chatImage: user1.customImage,
-        });
-
-        // Add chatId to users' 'chats' array
-        await ctx.db.patch(args.chatUsers[0], {
-          chats: [
-            ...((await ctx.db.get(args.chatUsers[0]))?.chats || []),
-            chatId,
-          ],
-        });
-
-        await ctx.db.patch(args.chatUsers[1], {
-          chats: [
-            ...((await ctx.db.get(args.chatUsers[1]))?.chats || []),
-            chatId,
-          ],
-        });
-      }
+    if (args.chatUsers.length < 2) {
+      throw new Error("Group chat must have at least 2 users");
     }
 
-    return chatId; // Return chatId outside the conditional blocks
+    // Fetch all users to ensure they exist
+    const users = await Promise.all(
+      args.chatUsers.map((userId) => ctx.db.get(userId))
+    );
+
+    if (users.some((user) => !user)) {
+      throw new Error("One or more users not found for group chat creation");
+    }
+
+    // Optional: Check if a group chat with the exact same users already exists
+    // (Skipping this for simplicity in this version, can be added later if needed)
+
+    const groupChatId = await ctx.db.insert("userChats", {
+      chatType: "group",
+      chatUsers: args.chatUsers,
+      chatName: "group ",
+      chatImage: "/src/web-avatars/Aliah%20Lane.webp", // Default group image if not provided
+      lastMessage: undefined,
+      unreadMessageCount: {}, // Initialize unreadMessageCount as empty record
+    });
+
+    // Update users' chats array to include the new userChats ID
+    await Promise.all(
+      args.chatUsers.map(async (userId) => {
+        await ctx.db.patch(userId, {
+          chats: [
+            ...((await ctx.db.get(userId))?.chats || []),
+            groupChatId as Id<"userChats">,
+          ],
+        });
+      })
+    );
+
+    return groupChatId;
+  },
+});
+export const createPersonalChat = mutation({
+  args: {
+    userId: v.id("users"),
+    otherPersonUserId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    if (args.userId === args.otherPersonUserId) {
+      throw new Error("Cannot create personal chat with the same user");
+    }
+
+    const currentUser = await ctx.db.get(args.userId);
+    const otherUser = await ctx.db.get(args.otherPersonUserId);
+
+    if (!currentUser || !otherUser) {
+      throw new Error("Users not found for personal chat creation");
+    }
+
+    // Check if a personal chat already exists between these two users
+
+    // Determine chat name and image (using other user's info for personal chats)
+    const chatName = otherUser.name;
+    const chatImage = otherUser.customImage;
+
+    const personalChatId = await ctx.db.insert("userChats", {
+      chatType: "personal",
+      chatUsers: [args.userId, args.otherPersonUserId],
+      chatName: chatName, // Set chat name to the other user's name
+      chatImage: chatImage, // Set chat image to the other user's image
+      lastMessage: undefined,
+      unreadMessageCount: {}, // Initialize unreadMessageCount as empty record
+    });
+
+    // Update users' chats array to include the new userChats ID
+    await ctx.db.patch(args.userId, {
+      chats: [
+        ...((await ctx.db.get(args.userId))?.chats || []),
+        personalChatId as Id<"userChats">,
+      ],
+    });
+
+    await ctx.db.patch(args.otherPersonUserId, {
+      chats: [
+        ...((await ctx.db.get(args.otherPersonUserId))?.chats || []),
+        personalChatId as Id<"userChats">,
+      ],
+    });
+
+    return personalChatId;
+  },
+});
+
+export const personalChatExists = query({
+  args: {
+    user1Id: v.id("users"),
+    user2Id: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    const userChat = await ctx.db
+      .query("userChats")
+      .withIndex("by_chatUsers", (q) =>
+        q.eq("chatUsers", [args.user1Id, args.user2Id])
+      )
+      .unique();
+
+    return {
+      exists: !!userChat,
+      chatId: userChat?._id,
+    };
   },
 });
 
@@ -71,43 +124,34 @@ export const getUserChats = query({
     userId: v.id("users"),
   },
   handler: async (ctx, args) => {
-    const userChatsFromDb = await ctx.db
-      .query("userChats")
-      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
-      .collect();
+    const user = await ctx.db.get(args.userId);
 
-    const chatsWithDetails = await Promise.all(
-      userChatsFromDb.map(async (userChat) => {
-        const chat = await ctx.db.get(userChat.chatId);
-        if (!chat) return null; // Handle deleted chats
+    if (!user || !user.chats) {
+      return []; // Return empty array if user or chats not found
+    }
 
-        return {
-          chatId: userChat.chatId,
-          chatImage: userChat.chatImage,
-          chatName: userChat.chatName,
-          chatType: chat.chatType,
-          lastMessage: chat.lastMessage,
-          unreadMessageCount: chat.unreadMessageCount?.[args.userId] || 0, // Get unread count
-        };
+    const userChats = await Promise.all(
+      user.chats.map(async (chatId) => {
+        return await ctx.db.get(chatId);
       })
     );
 
-    return chatsWithDetails.filter((chat) => chat !== null);
+    // Filter out null values in case some chatIds are invalid
+    return userChats.filter((chat) => chat !== null);
   },
 });
-
 export const sendMessage = mutation({
   args: {
     senderId: v.id("users"),
-    chatId: v.id("chats"),
+    chatId: v.id("userChats"),
     message: v.string(),
   },
   handler: async (ctx, args) => {
     const message = await ctx.db.insert("messages", {
-      senderId: args.senderId,
-      chatId: args.chatId,
       message: args.message,
+      senderId: args.senderId,
       readBy: [],
+      userChatId: args.chatId,
     });
     const chat = await ctx.db.get(args.chatId);
     if (!chat) throw new Error("Chat not found");
@@ -131,10 +175,9 @@ export const sendMessage = mutation({
     return message;
   },
 });
-
 export const markMessagesAsRead = mutation({
   args: {
-    chatId: v.id("chats"),
+    chatId: v.id("userChats"),
     userId: v.id("users"),
   },
   handler: async (ctx, args) => {
@@ -153,151 +196,6 @@ export const markMessagesAsRead = mutation({
     });
 
     return { success: true };
-  },
-});
-
-export const getMessages = query({
-  args: {
-    chatId: v.id("chats"),
-  },
-  handler: async (ctx, args) => {
-    // Fetch messages for the given chat
-    const messages = await ctx.db
-      .query("messages")
-      .withIndex("by_chat_id", (q) => q.eq("chatId", args.chatId))
-      .order("asc")
-      .collect();
-
-    // Extract unique sender IDs
-    const senderIds = [...new Set(messages.map((message) => message.senderId))];
-
-    // Fetch sender details in a single batch operation, filtering out null values
-    const senders = await Promise.all(
-      senderIds.map(async (senderId) => {
-        const sender = await ctx.db.get(senderId);
-        return sender
-          ? {
-              _id: sender._id,
-              name: sender.name,
-              customImage: sender.customImage,
-            }
-          : null;
-      })
-    );
-
-    // Create a map of senderId -> sender details for easy lookup
-    const senderMap = Object.fromEntries(
-      senders
-        .filter(
-          (
-            sender
-          ): sender is {
-            _id: Id<"users">;
-            name: string;
-            customImage: string;
-          } => sender !== null
-        ) // Ensure non-null values
-        .map((sender) => [
-          sender._id,
-          { name: sender.name, customImage: sender.customImage },
-        ])
-    );
-
-    // Attach sender details to each message
-    const messagesWithSenders = messages.map((message) => ({
-      ...message,
-      sender: senderMap[message.senderId] || {
-        name: "Unknown",
-        customImage: "",
-      }, // Default in case sender not found
-    }));
-
-    return messagesWithSenders;
-  },
-});
-
-export const chatAlreadyExist = query({
-  args: {
-    chatUsers: v.array(v.id("users")),
-  },
-  handler: async (ctx, args) => {
-    const existingChat = await ctx.db
-      .query("chats")
-      .withIndex("by_chat_users", (q) => q.eq("chatUsers", args.chatUsers))
-      .unique();
-
-    return {
-      exists: !!existingChat,
-      chatId: existingChat?._id,
-    };
-  },
-});
-
-export const editMessage = mutation({
-  args: {
-    messageId: v.id("messages"),
-    newMessage: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const message = await ctx.db.get(args.messageId);
-    if (!message) {
-      throw new Error("Message not found");
-    }
-    await ctx.db.patch(args.messageId, {
-      message: args.newMessage ?? message.message,
-      updatedAt: Date.now(),
-    });
-    return args.messageId;
-  },
-});
-
-export const getMessageById = query({
-  args: {
-    messageId: v.id("messages"),
-  },
-  handler: async (ctx, args) => {
-    const message = await ctx.db.get(args.messageId);
-
-    if (!message) {
-      throw new Error("Message not found");
-    }
-
-    const exitingMessage = message.message;
-    return exitingMessage;
-  },
-});
-
-export const getOtherUserInChat = query({
-  args: {
-    userId: v.id("users"),
-    chatId: v.id("chats"),
-  },
-  handler: async (ctx, args) => {
-    const chat = await ctx.db.get(args.chatId);
-    if (!chat) {
-      return null; // Or throw an error
-    }
-
-    const otherUserId = chat.chatUsers.find((id) => id !== args.userId);
-    if (!otherUserId) {
-      return null; // Or throw an error if no other user exists (e.g., group chat with only one user)
-    }
-
-    const otherUserChat = await ctx.db
-      .query("userChats")
-      .withIndex("by_chat_and_user", (q) =>
-        q.eq("chatId", args.chatId).eq("userId", otherUserId)
-      )
-      .unique();
-
-    if (!otherUserChat) {
-      return null; // Handle the case where the other user's entry is not found
-    }
-
-    return {
-      name: otherUserChat.chatName,
-      image: otherUserChat.chatImage,
-    };
   },
 });
 
@@ -364,5 +262,78 @@ export const getMessageReactions = query({
       return null; // Or throw an error if message not found is exceptional
     }
     return message.reactionPath || []; // Return reactionPath array or empty array if not set
+  },
+});
+
+export const getMessages = query({
+  args: {
+    chatId: v.id("userChats"),
+  },
+  handler: async (ctx, args) => {
+    // Fetch messages for the given chat
+    const messages = await ctx.db
+      .query("messages")
+      .withIndex("by_user_chat_id", (q) => q.eq("userChatId", args.chatId))
+      .order("asc")
+      .collect();
+
+    // Extract unique sender IDs
+    const senderIds = [...new Set(messages.map((message) => message.senderId))];
+
+    // Fetch sender details in a single batch operation, filtering out null values
+    const senders = await Promise.all(
+      senderIds.map(async (senderId) => {
+        const sender = await ctx.db.get(senderId);
+        return sender
+          ? {
+              _id: sender._id,
+              name: sender.name,
+              customImage: sender.customImage,
+            }
+          : null;
+      })
+    );
+
+    // Create a map of senderId -> sender details for easy lookup
+    const senderMap = Object.fromEntries(
+      senders
+        .filter(
+          (
+            sender
+          ): sender is {
+            _id: Id<"users">;
+            name: string;
+            customImage: string;
+          } => sender !== null
+        ) // Ensure non-null values
+        .map((sender) => [
+          sender._id,
+          { name: sender.name, customImage: sender.customImage },
+        ])
+    );
+
+    // Attach sender details to each message
+    const messagesWithSenders = messages.map((message) => ({
+      ...message,
+      sender: senderMap[message.senderId] || {
+        name: "Unknown",
+        customImage: "",
+      }, // Default in case sender not found
+    }));
+
+    return messagesWithSenders;
+  },
+});
+
+export const getChatById = query({
+  args: {
+    chatId: v.id("userChats"),
+  },
+  handler: async (ctx, args) => {
+    const chat = await ctx.db.get(args.chatId);
+    if (!chat) {
+      throw new Error("Chat not found");
+    }
+    return chat;
   },
 });

@@ -1,4 +1,8 @@
-import { useCreateChat } from "@/actions/mutations/messages";
+import {
+  useCreateGroupChat,
+  useCreatePersonalChat,
+} from "@/actions/mutations/messages/message-mution";
+import { useIsPersonalChatExist } from "@/actions/query/messages/message-query";
 import { useGetCurrentUser } from "@/actions/query/users";
 import SubmitButton from "@/components/ui/submit-button";
 import { cn } from "@/lib/utils";
@@ -10,54 +14,47 @@ interface CreateChatProps {
   setIsOpen: React.Dispatch<React.SetStateAction<boolean>>;
   userIds: Id<"users">[];
   chatType: "group" | "personal";
+  otherPersonUserId: Id<"users">;
 }
 
 export const CreateMessageButton = ({
   setIsOpen,
   userIds,
+  otherPersonUserId,
+
   chatType,
 }: CreateChatProps) => {
   const user = useGetCurrentUser();
   const userId = user?._id;
-  const { mutate: createChat, isPending: creatingChat } = useCreateChat();
+  const { mutate: createPersonalChat, isPending: creatingPeronalChat } =
+    useCreatePersonalChat();
+  const { mutate: createGroupChat, isPending: creatingGroupChat } =
+    useCreateGroupChat();
+  const personalChatExist = useIsPersonalChatExist({
+    user1Id: userId,
+    user2Id: otherPersonUserId,
+  });
+  //  it will return a true and a chat id so we can redirect them to their chat
   const navigate = useNavigate();
+  const chatName = user?.name;
+  const chatImage = user?.customImage;
 
   const handleCreateChat = (event: React.FormEvent) => {
     event.preventDefault();
-
-    if (!userId || userIds.length === 0) {
-      console.error("Missing user IDs.");
-      return;
-    }
-
-    const uniqueUserIds = Array.from(new Set([userId, ...userIds]));
-
-    if (chatType === "personal" && uniqueUserIds.length !== 2) {
-      console.error("Personal chat must have exactly 2 users.");
-      return;
-    }
-
-    if (chatType === "group" && uniqueUserIds.length < 2) {
-      console.error("Group chat must have at least 2 users.");
-      return;
-    }
-
-    createChat(
-      {
-        chatImage: "", // You might want to handle chat images later
-        chatUsers: uniqueUserIds,
-      },
-      {
-        onSuccess(data) {
-          navigate(`/message/${data}`);
-          setIsOpen(false);
-        },
-        onError(error) {
-          console.error("Error creating chat:", error);
-          setIsOpen(false);
-        },
+    if (chatType === "personal") {
+      if (chatName && chatImage && userId) {
+        createPersonalChat({
+          otherPersonUserId,
+          userId,
+        });
       }
-    );
+    } else if (chatType === "group") {
+      if (userIds) {
+        createGroupChat({
+          chatUsers: userIds,
+        });
+      }
+    }
   };
 
   return (
@@ -68,9 +65,9 @@ export const CreateMessageButton = ({
           chatType === "group" && "bg-pink-400 hover:bg-pink-500 w-full"
         )}
         variant="outline"
-        isLoading={creatingChat}
+        isLoading={creatingPeronalChat}
       >
-        {creatingChat ? (
+        {creatingPeronalChat ? (
           <span>
             <LoaderIcon className="animate-spin mr-2" />
             Creating...
