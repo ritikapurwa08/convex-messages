@@ -29,8 +29,8 @@ const UserDetails = ({ toggleSidebar }: UserDetailsProps) => {
   }
 
   return (
-    <div className="p-4 flex flex-col space-y-4">
-      <div className="flex items-center space-x-4">
+    <div className="p-4 flex flex-row space-y-4">
+      <div className="flex items-center justify-between w-full space-x-4">
         <Avatar className="w-12 h-12">
           <AvatarImage src={user.customImage} alt={user.name} />
           <AvatarFallback>{user.name.charAt(0).toUpperCase()}</AvatarFallback>
@@ -43,9 +43,6 @@ const UserDetails = ({ toggleSidebar }: UserDetailsProps) => {
             {user.email}
           </p>
         </div>
-      </div>
-      <div className="border-b dark:border-gray-700" /> {/* Separator */}
-      <div className="mt-2">
         <UserLogOutButton />
       </div>
     </div>

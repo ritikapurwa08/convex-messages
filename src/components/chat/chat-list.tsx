@@ -24,13 +24,13 @@ interface ChatListProps {
 const ChatList = ({ chat, onChatSelect, selectedChatId }: ChatListProps) => {
   const user = useGetCurrentUser();
   const userId = user?._id;
-  const isLoading = chat === undefined;
-  const navigate = useNavigate(); // Initialize useNavigate
+  let stop = "stopss";
+  // Initialize useNavigate
 
-  if (isLoading) {
+  if (chat === undefined || user === undefined || stop === "stops") {
     return (
-      <div className="space-y-4 p-4">
-        {[...Array(6)].map((_, i) => (
+      <div className="space-y-4 min-h-[40vh] p-4">
+        {[...Array(4)].map((_, i) => (
           <div
             key={i}
             className="flex items-center p-4 rounded-xl bg-secondary dark:bg-secondary-foreground animate-pulse"
@@ -49,10 +49,20 @@ const ChatList = ({ chat, onChatSelect, selectedChatId }: ChatListProps) => {
 
   if (!chat || !user || !userId || chat.length === 0) {
     return (
-      <div className="flex justify-center items-center h-32 p-4">
-        <h1 className="text-lg font-semibold text-muted-foreground dark:text-muted">
-          No chats found
-        </h1>
+      <div className="space-y-4 min-h-[40vh] p-4">
+        {[...Array(4)].map((_, i) => (
+          <div
+            key={i}
+            className="flex items-center p-4 rounded-xl bg-secondary dark:bg-secondary-foreground animate-pulse"
+          >
+            <Skeleton className="w-12 h-12 rounded-full mr-4" />
+            <div className="flex-1">
+              <Skeleton className="h-6 w-32 mb-1" />
+              <Skeleton className="h-4 w-48" />
+            </div>
+            <Skeleton className="w-16 h-8 rounded-full" />
+          </div>
+        ))}
       </div>
     );
   }
@@ -62,7 +72,7 @@ const ChatList = ({ chat, onChatSelect, selectedChatId }: ChatListProps) => {
   };
 
   return (
-    <div className="space-y-4 max-h-[50vh] md:max-h-[55vh] custom-scrollbar  min-h-[50vh] md:min-h-[20vh] overflow-y-auto px-4">
+    <div className="space-y-4 max-h-[50vh] md:max-h-[55vh] custom-scrollbar  min-h-[50vh] md:min-h-[50vh] overflow-y-auto px-4">
       {chat.map((chatItem) => (
         <div
           key={chatItem._id}

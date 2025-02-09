@@ -14,7 +14,7 @@ const UserLogOutButton = () => {
     setIsLoading(true);
     signOut()
       .then(() => {
-        navigate("/login");
+        navigate("/sign-in");
         toast({
           title: "Logout successful",
           description: "You have been logged out successfully.",
@@ -38,18 +38,15 @@ const UserLogOutButton = () => {
       onClick={handleLogout}
       disabled={isLoading}
       variant="destructive" // You can change this to "secondary", "ghost", etc.
-      size="sm"
-      className="w-full" // Make the button full width
+      size="icon"
     >
       {isLoading ? (
         <>
-          <LoaderIcon className="mr-2 h-4 w-4 animate-spin" />
-          Logging Out...
+          <LoaderIcon className=" h-4 w-4 animate-spin" />
         </>
       ) : (
         <>
-          <LogOut className="mr-2 h-4 w-4" />
-          Log Out
+          <LogOut className=" h-4 w-4" />
         </>
       )}
     </Button>

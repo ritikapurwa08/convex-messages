@@ -337,3 +337,59 @@ export const getChatById = query({
     return chat;
   },
 });
+
+export const setupDefaultChat = mutation({
+  args: {
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    // Check if user already has the default chat
+    const user = await ctx.db.get(args.userId);
+    if (!user) return null;
+
+    const existingChats = await ctx.db
+      .query("userChats")
+      .withIndex("by_chatUsers", (q) => q.eq("chatUsers", [args.userId]))
+      .collect();
+
+    // If user already has chats, return
+    if (existingChats.length > 0) return existingChats[0]._id;
+
+    // Create default chat
+    const defaultChatId = await ctx.db.insert("userChats", {
+      chatType: "personal",
+      chatName: "Welcome Chat",
+      chatImage: "/src/web-avatars/Cameron%20Yang.webp", // Add your default image path
+      chatUsers: [args.userId],
+      lastMessage: "Welcome to our chat application! 👋",
+      unreadMessageCount: { [args.userId]: 0 },
+    });
+
+    // Create welcome messages
+    const welcomeMessages = [
+      `"Welcome ${user.name} to our chat application! 👋"`,
+      "Here are some things you can do:",
+      "1. Start new conversations",
+      "2. Send messages and reactions",
+      "3. Create group chats",
+    ];
+
+    // Insert welcome messages
+    for (const message of welcomeMessages) {
+      await ctx.db.insert("messages", {
+        senderId: args.userId,
+        userChatId: defaultChatId,
+        message,
+        readBy: [args.userId],
+        updatedAt: Date.now(),
+      });
+    }
+
+    // Update user's chats array
+    await ctx.db.patch(args.userId, {
+      chats: [...(user.chats || []), defaultChatId],
+    });
+
+    return defaultChatId;
+  },
+});

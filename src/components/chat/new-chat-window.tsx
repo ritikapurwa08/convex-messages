@@ -7,8 +7,9 @@ import UserDetails from "../users/user-auth/user-details";
 import CreateChatDialog from "./create-chat";
 import { Input } from "../ui/input";
 import { Sheet, SheetContent, SheetTrigger } from "../ui/sheet";
-import { MenuIcon, Search as SearchIcon } from "lucide-react";
+import { MenuIcon } from "lucide-react";
 import { Button } from "../ui/button";
+import { Skeleton } from "../ui/skeleton";
 
 interface ChatWindowContentProps {
   onChatSelect: (chatId: Id<"userChats">) => void;
@@ -23,21 +24,22 @@ const ChatWindowContent = ({
 }: ChatWindowContentProps) => {
   const user = useGetCurrentUser();
   const userId = user?._id;
-  const allChats = useGetUserChats({ userId });
+  const allChats:
+    | Array<{
+        _id: Id<"userChats">;
+        _creationTime: number;
+        lastMessage?: string | undefined;
+        unreadMessageCount?: Record<Id<"users">, number> | undefined;
+        chatType: "group" | "personal";
+        chatName: string;
+        chatImage: string;
+        chatUsers: Id<"users">[];
+      }>
+    | undefined = useGetUserChats({ userId });
   const navigate = useNavigate();
-  const [isMobile, setIsMobile] = useState(false);
+
   const [searchQuery, setSearchQuery] = useState("");
   const [filteredChats, setFilteredChats] = useState(allChats);
-
-  useEffect(() => {
-    const handleResize = () => {
-      setIsMobile(window.innerWidth < 768);
-    };
-
-    handleResize();
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
 
   useEffect(() => {
     if (allChats) {
@@ -50,14 +52,49 @@ const ChatWindowContent = ({
     }
   }, [searchQuery, allChats]);
 
+  // Added selectedChatId and navigate as dependencies
+
   const handleChatSelection = (chatId: Id<"userChats">) => {
-    if (isMobile) {
-      navigate(`/chat/${chatId}`);
-      onOpenChange(false);
-    } else {
-      onChatSelect(chatId);
-    }
+    navigate(`/chat/${chatId}`);
+    onOpenChange(false);
+    onChatSelect(chatId);
   };
+
+  if (filteredChats === undefined) {
+    return (
+      <div className="p-0 flex flex-col h-full bg-background">
+        <div className="border-b p-4 flex justify-between items-center">
+          <div className="flex flex-col w-full">
+            <div className="flex flex-row justify-between items-center px-2 pt-2">
+              <Skeleton className="h-8 w-32 rounded-md" />{" "}
+              {/* Skeleton for "Chats" heading */}
+            </div>
+            <div className="p-2">
+              <Input
+                type="search"
+                placeholder="Search chats..."
+                disabled
+                className="w-full rounded-md bg-secondary border-none text-white focus-visible:ring-ring focus-visible:ring-offset-2"
+              />
+            </div>
+            <div className="flex justify-start p-2 space-x-2"></div>
+          </div>
+        </div>
+        <div className=" flex-1 grow max-h-[90vh] min-h-fit relative h-fit custom-scrollbar overflow-y-auto p-4">
+          <div className="space-y-4">
+            <Skeleton className="h-12 w-full rounded-md" />
+            <Skeleton className="h-12 w-full rounded-md" />
+            <Skeleton className="h-12 w-full rounded-md" />
+            <Skeleton className="h-12 w-full rounded-md" />
+          </div>
+        </div>
+        <div className="sticky pb-2 px-4 bottom-0">
+          <Skeleton className="h-10 w-full rounded-md" />{" "}
+          {/* Skeleton for UserDetails */}
+        </div>
+      </div>
+    );
+  }
 
   if (!userId) {
     return <div>User not found</div>;
@@ -85,42 +122,57 @@ const ChatWindowContent = ({
           </div>
         </div>
       </div>
-      <div className="">
+      <div className="flex-1 grow pt-6">
         <ChatList
           chat={filteredChats}
           onChatSelect={handleChatSelection}
           selectedChatId={selectedChatId}
         />
+
         <div className="sticky pb-2 px-4 bottom-0">
           <UserDetails />
+        </div>
+        <div className="flex px-8">
+          <Button
+            className="w-full "
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+          >
+            Close
+          </Button>
         </div>
       </div>
     </div>
   );
 };
-
-const StandaloneChatWindow = () => {
+interface StandaloneChatWindowProps {
+  onChatSelect?: (chatId: Id<"userChats">) => void;
+  isSheetOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}
+const StandaloneChatWindow = ({ onChatSelect }: StandaloneChatWindowProps) => {
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [currentSelectedChatId, setCurrentSelectedChatId] =
     useState<Id<"userChats"> | null>(null);
 
   const handleChatSelectStandalone = (chatId: Id<"userChats">) => {
     setCurrentSelectedChatId(chatId);
-    setIsSheetOpen(false); // Close sheet after chat selection even on desktop for standalone version
+    setIsSheetOpen(false);
+    onChatSelect?.(chatId); // Call the parent's onChatSelect if provided
   };
 
   return (
     <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
       <SheetTrigger asChild>
-        <Button variant="ghost" size="icon">
+        <Button className="" variant="ghost" size="icon">
           <MenuIcon className="h-5 w-5" />
         </Button>
       </SheetTrigger>
       <SheetContent className="p-0 flex w-full flex-col h-full bg-background">
         <ChatWindowContent
-          onChatSelect={handleChatSelectStandalone} // Use standalone chat select handler
-          selectedChatId={currentSelectedChatId} // Pass the internally managed selectedChatId
-          onOpenChange={setIsSheetOpen} // Pass setIsSheetOpen to ChatWindowContent
+          onChatSelect={handleChatSelectStandalone}
+          selectedChatId={currentSelectedChatId}
+          onOpenChange={setIsSheetOpen}
         />
       </SheetContent>
     </Sheet>

@@ -1,5 +1,5 @@
 import { ThemeProvider } from "@/components/ui/theme-provider";
-import RootLayout from "./layout";
+import { RootLayout } from "./layout";
 
 const App = () => {
   return (

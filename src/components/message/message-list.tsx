@@ -46,11 +46,9 @@ const bubbleGradients = [
 export const MessageList = ({ messages, userId, chatId }: MessageListProps) => {
   let stop = "stops";
   const [gradientIndex, setGradientIndex] = useState(0);
-  const messageEndRef = useRef<HTMLDivElement | null>(null);
   const { mutate: markAsRead } = useMarkAsRead();
 
   useEffect(() => {
-    messageEndRef.current?.scrollIntoView({ behavior: "smooth" });
     if (chatId && userId) {
       markAsRead({ chatId, userId });
     }
@@ -74,7 +72,7 @@ export const MessageList = ({ messages, userId, chatId }: MessageListProps) => {
 
   if (messages && messages.length === 0) {
     return (
-      <div className="text-center text-gray-500">
+      <div className="text-center  min-h-full h-[60vh] w-full flex justify-center items-center flex-col text-gray-500">
         <MessageSquareIcon className="size-10 mx-auto my-4" />
         <h1>You haven't sent any messages yet.</h1>
       </div>
@@ -91,7 +89,7 @@ export const MessageList = ({ messages, userId, chatId }: MessageListProps) => {
   }
 
   return (
-    <div className={cn("pb-12 flex flex-col w-full  px-4 mx-auto")}>
+    <div className={cn("pb-12 flex flex-col w-full  px-0.5 md:px-4 mx-auto")}>
       {messages.map((message, index) => {
         const isOwner = message.senderId === userId;
         const bubbleGradientClass = isOwner
@@ -176,7 +174,6 @@ export const MessageList = ({ messages, userId, chatId }: MessageListProps) => {
           </motion.div>
         );
       })}
-      <div ref={messageEndRef} />
     </div>
   );
 };

@@ -72,7 +72,7 @@ const SendMessage = ({
     <Form {...form}>
       <form
         onSubmit={form.handleSubmit(handleSendMessage)}
-        className="flex w-full gap-2"
+        className="flex w-full  gap-2"
       >
         {error && <p className="text-red-500">{error}</p>}
         <CustomMessageInput

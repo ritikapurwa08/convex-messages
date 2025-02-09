@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -116,7 +116,7 @@ const UserSignUp = ({
       flow: "signUp",
     })
       .then(() => {
-        navigate("/");
+        navigate("/chat");
       })
       .catch((err) => {
         console.error(err);
