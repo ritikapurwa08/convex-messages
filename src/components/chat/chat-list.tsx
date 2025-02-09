@@ -2,7 +2,6 @@ import { Id } from "@convex/_generated/dataModel";
 import { Skeleton } from "../ui/skeleton";
 import { cn } from "@/lib/utils";
 import { useGetCurrentUser } from "@/actions/query/users";
-import { useNavigate } from "react-router-dom"; // Import useNavigate
 
 interface ChatDataType {
   _id: Id<"userChats">;

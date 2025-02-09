@@ -3,11 +3,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import UserLogOutButton from "./user-logout-button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
-interface UserDetailsProps {
-  toggleSidebar?: () => void; // Optional prop to toggle sidebar if needed
-}
-
-const UserDetails = ({ toggleSidebar }: UserDetailsProps) => {
+const UserDetails = () => {
   const user = useGetCurrentUser();
   const isLoading = user === undefined;
 

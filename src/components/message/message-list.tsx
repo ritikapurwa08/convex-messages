@@ -2,7 +2,7 @@ import { Id } from "@convex/_generated/dataModel";
 import { Skeleton } from "../ui/skeleton";
 import { motion } from "framer-motion";
 import { MessageSquareIcon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import AddMessageReaction from "./add-reaction-dropdown";
 import ShowMessageEmoji from "./show-message-reaction";
